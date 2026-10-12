@@ -1,0 +1,98 @@
+classDiagram
+    %% Phase 1 draft. Must be reconciled with the final implementation (-> uml.mmd).
+
+    class Owner {
+        +str name
+        +int daily_budget_minutes
+        +List~str~ preferred_categories
+        +List~Pet~ pets
+        +add_pet(pet) None
+        +get_pet(name) Pet
+        +all_tasks() List~Task~
+        +find_task(task_id) Tuple
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +List~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_id) bool
+        +get_task(task_id) Task
+    }
+
+    class Task {
+        +str id
+        +str series_id
+        +str description
+        +datetime scheduled_at
+        +int duration_minutes
+        +Priority priority
+        +Frequency frequency
+        +str category
+        +bool completed
+        +end_time() datetime
+        +overlaps(other) bool
+        +next_occurrence(after) Task
+        +mark_complete(completed_at) Task
+    }
+
+    class Scheduler {
+        +Owner owner
+        +add_task(pet_name, task) List~Conflict~
+        +complete_task(task_id, completed_at) Task
+        +build_daily_plan(day, budget_minutes) DailyPlan
+        +find_next_available_slot(duration, start, end) datetime
+        +sort_by_time(tasks) List~Task~
+        +filter_tasks(pet_name, completed, on_date) List~Task~
+        +detect_conflicts() List~Conflict~
+    }
+
+    class Conflict {
+        +Task first
+        +Task second
+        +str first_pet
+        +str second_pet
+        +int overlap_minutes
+    }
+
+    class DailyPlan {
+        +date day
+        +int budget_minutes
+        +List~PlanEntry~ selected
+        +List~PlanEntry~ skipped
+    }
+
+    class PlanEntry {
+        +Task task
+        +str pet_name
+        +str reason
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+        +from_str(value) Priority
+    }
+
+    class Frequency {
+        <<enumeration>>
+        NONE
+        DAILY
+        WEEKLY
+        +interval() timedelta
+    }
+
+    Owner "1" *-- "0..*" Pet : owns
+    Pet "1" *-- "0..*" Task : has
+    Scheduler "1" --> "1" Owner : reads tasks via
+    Scheduler ..> Conflict : returns
+    Scheduler ..> DailyPlan : builds
+    DailyPlan "1" *-- "0..*" PlanEntry
+    PlanEntry --> Task
+    Conflict --> "2" Task : involves
+    Task --> Priority
+    Task --> Frequency
+    Task ..> Task : next occurrence
