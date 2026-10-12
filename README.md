@@ -38,7 +38,7 @@ All domain code is in [pawpal_system.py](pawpal_system.py).
 
 | Class | Responsibility |
 |-------|----------------|
-| `Owner` | The one user: name, daily time budget (`daily_budget_minutes`), `preferred_categories` (tie-breaks), waking hours, and their pets. Aggregates tasks across pets (`all_tasks`) and is the only place that maps a task to its pet (`find_task`). Pet names are unique (case-insensitive). |
+| `Owner` | The one user: name, daily time budget (`daily_budget_minutes`), `preferred_categories` (tie-breaks), waking hours, and their pets. Aggregates tasks across pets (`all_tasks`) and looks up a task's pet (`find_task`). Tasks carry no pet field; `Scheduler` builds its own task-id to pet-name lookup from the owner's pets (`pet_name_of`) for display and tie-breaks. Pet names are unique (case-insensitive). |
 | `Pet` | Name, species and its own tasks. `add_task` / `remove_task` / `get_task` / `list_tasks`; rejects duplicate ids and duplicate recurrence occurrences. |
 | `Task` | One activity. Validates its input (non-empty description, positive integer duration, naive datetime). Knows its `end_time`, whether it `overlaps` another, its `next_occurrence`, and `mark_complete`. |
 | `Scheduler` | Holds **no tasks** of its own; reads them through the `Owner`. Sorting, filtering, conflicts, completion with recurrence, daily planning and slot search. |
@@ -268,7 +268,7 @@ Invalid input (empty description, duplicate pet, bad data file) produces an erro
 - Duration is whole minutes; a task is assigned to the day it starts.
 - Recurrence supports daily and weekly only; there is no "skip" or "end date" for a series.
 - One owner per data file; no editing of an existing task or removing a pet in the UI yet.
-- The Streamlit app was exercised headlessly (see below) but not yet checked by hand in a browser.
+- Browser-checked by hand: loading the sample data, the daily plan at 120 vs. 60 available minutes, completing a recurring task, and save/load. The rest of the UI (adding tasks via the form, filters, conflict panel, slot finder, invalid-input messages, layout/responsiveness) was only exercised headlessly (see below), not by hand in a browser.
 - Future: edit/delete tasks, auto-placing unscheduled tasks into free slots, monthly recurrence, reminders.
 
 Headless checks of `app.py` (Streamlit's `AppTest`: create owner, add pet/tasks, conflict warning, invalid input, complete, save/load, sample data) were run during development with a throwaway script that is not part of the repository.
