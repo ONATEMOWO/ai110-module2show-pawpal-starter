@@ -28,8 +28,16 @@ One tradeoff I'm not sure about: `Task` stores `pet_name` so the Scheduler can s
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+The design changed after I reviewed the Phase 1 draft, before and during implementation. The concrete changes and reasons:
+
+- **The scheduler is more than a sorted calendar.** The starter README asks for a daily plan that respects available time, priority and owner preferences and explains itself, and my first draft only sorted and filtered. I added `Owner.daily_budget_minutes` and `preferred_categories`, a `Scheduler.build_daily_plan()` method and `DailyPlan`/`PlanEntry` result types so every selected or skipped task carries a reason.
+- **Removed `Task.pet_name`.** In the draft it duplicated the pet's name and could drift out of sync with `Pet.name`. Now `Owner.find_task()` is the only place a task is mapped to its pet, and `Conflict`/`PlanEntry` record pet names as a snapshot in the result. The cost is a lookup instead of a field.
+- **Recurrence:** the draft only said "create the next occurrence on completion". It now advances along the original cadence to the first occurrence strictly after an injectable completion time, so a late completion makes one new task, not a backlog. Completing twice returns nothing, and `Pet.add_task` refuses a second occurrence of the same `(series_id, scheduled_at)`.
+- **Duplicates vs. conflicts:** I originally wanted to reject "the same task entered twice". That would also reject two different tasks at the same time, which is really a conflict the owner should hear about. Duplicates are now only repeated ids or repeated recurrence slots; everything else overlapping is a `Conflict`.
+- **Validation and small renames:** `Frequency.ONCE` became `NONE`; tasks validate a positive integer duration and reject timezone-aware datetimes; `Conflict` gained both pet names; a `category` field supports the owner's tie-break preference.
+- **New features not in the draft:** `find_next_available_slot`, JSON `to_dict`/`from_dict`/`save_owner`/`load_owner`, and `formatting.py` shared by the CLI and the app.
+
+The final diagram is in `diagrams/uml_final.mmd` (also copied to `uml.mmd`); the draft is kept in `diagrams/uml_draft.mmd` as history.
 
 ---
 
@@ -37,13 +45,11 @@ One tradeoff I'm not sure about: `Task` stores `pet_name` so the Scheduler can s
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The planner considers, in this order: the day (only incomplete tasks starting that day), the owner's available minutes, fixed start times (no overlaps among chosen tasks), priority, then the owner's preferred categories, start time and description as tie-breakers. I put priority first because a high-priority task such as medication matters more than where it falls in the day, and the time budget second because it is the hard limit. Preferences only break ties, so they can never outrank an urgent task. Conflicts are checked across all pets because one person has to do the care.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+The daily plan is greedy. It walks tasks from most to least important and keeps each one that still fits and doesn't overlap, which is easy to explain and fully deterministic, but it isn't optimal: a big high-priority task can use up budget that two medium tasks could have shared. I accepted that because an owner can read "why was this skipped" in one sentence, and an exact knapsack solver would be harder to explain and test for a project this size. A second tradeoff: tasks have fixed times, so the planner only chooses among them; it does not move tasks (the next-slot search is the separate tool for that). Naive datetimes (no time zones) are a third, deliberate simplification.
 
 ---
 
@@ -51,13 +57,13 @@ One tradeoff I'm not sure about: `Task` stores `pet_name` so the Scheduler can s
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+I used Claude Code in separate phases: first only architecture (class responsibilities, the UML draft, class skeletons and the design questions about ids, time representation, recurrence and conflicts), then a review where I decided what to change, then one implementation pass for the backend, tests, CLI, Streamlit app and docs. Prompts that stated constraints explicitly (for example "completing late must not create a backlog", "back-to-back tasks must not conflict") produced the most useful results, because they turned into tests directly.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+- **Accepted:** my review said to either remove or consistently validate the duplicated `Task.pet_name`, and the AI chose to remove it and keep one owner-level lookup (`Owner.find_task`). I kept that choice because it removes a whole class of inconsistency instead of adding validation code. `test_owner_pets_unique_and_multi_pet_aggregation` checks the pet lookup.
+- **Revised:** the Phase 1 draft I received treated duplicates and recurrence too loosely and had no budgeted plan; I did not accept that design as-is and sent it back with specific corrections (listed in 1b). Separately, the first version of the plan explanations included a running "N of B min used" figure; in the CLI output it was listed in priority order rather than time order and read as confusing, so it was changed to "fits the budget".
+- **Verification:** the AI's first test run had one failing test, `test_full_containment_and_same_start_are_conflicts`. The cause was the expected pair order in the test (the sort puts the earlier-starting task first), not the conflict code; the test was corrected and the suite re-run. I have not hand-checked the algorithms beyond reading the CLI output and tests. Manual testing of the Streamlit app in a browser is pending.
 
 ---
 
@@ -65,13 +71,11 @@ One tradeoff I'm not sure about: `Task` stores `pet_name` so the Scheduler can s
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+The 42 pytest tests (see README) cover task validation and completion, pet/owner management, sorting tie-breaks, filtering, conflicts (partial, containment, identical start, adjacent, completed, cross-pet), daily/weekly/late recurrence and idempotency, the daily plan (priority vs. time, budget changes, skip reasons, tie-breaks, no mutation), the next-slot search, JSON round-trip and invalid data, and empty inputs. They mattered because these rules are where scheduling bugs hide (off-by-one at interval edges, duplicate recurrences) and they all use fixed dates, so results are reproducible.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+All 42 tests passed on the last run and the CLI demo output matches the documented rules, so I'm fairly confident in the backend. I'm less sure about the Streamlit UI: it was only exercised with Streamlit's headless `AppTest` (create owner, add pet/task, conflict warning, complete, save/load) and a server start-up check, not by hand in a browser; visual layout and responsiveness are unverified (pending). Next I would test tasks that cross midnight, very many tasks (the conflict check is quadratic in the worst case), and a recurring task with an existing future occurrence.
 
 ---
 
@@ -79,12 +83,12 @@ One tradeoff I'm not sure about: `Task` stores `pet_name` so the Scheduler can s
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+Separating design from implementation worked: reviewing the draft before any logic existed caught the missing daily plan, the duplicate-state problem and the loose recurrence rule while they were cheap to fix. Making the scheduler a pure function of the owner's data plus injected dates also made the tests easy to write.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+I would add editing and deleting tasks and pets, let a recurring series end, and have the planner place unscheduled tasks into free slots rather than only choosing among fixed times.
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+Being explicit about edge-case rules (half-open intervals, "strictly after", what counts as a duplicate) up front matters more than the code itself, and an AI assistant is most useful when those rules are given as constraints and then checked by tests rather than trusted. Its first design needed a human review before it was good.

@@ -28,8 +28,9 @@ def at(hour: int, minute: int = 0, day: date = DAY) -> datetime:
     return datetime.combine(day, time(hour, minute))
 
 
-def build_demo() -> tuple[Owner, Scheduler]:
-    """Sample data, added deliberately out of chronological order."""
+def build_demo(day: date = DAY) -> tuple[Owner, Scheduler]:
+    """Sample data on `day`, added deliberately out of chronological order."""
+    at = lambda h, m=0: datetime.combine(day, time(h, m))  # noqa: E731
     owner = Owner("Jordan", daily_budget_minutes=120, preferred_categories=["meds", "feeding"])
     owner.add_pet(Pet("Mochi", "dog"))
     owner.add_pet(Pet("Whiskers", "cat"))
